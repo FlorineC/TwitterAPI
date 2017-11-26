@@ -41,32 +41,29 @@ public final class Twitter {
 
     private static java.nio.file.Path path = Paths.get("twitter-credentials.txt");
     private static TwitterStream twitterStream;
+    private static twitter4j.Twitter twitter;
 
     public static void main(String[] args) throws Exception {
         oAuth();
-        StatusListener listener = new StatusListener(){
+        oAuthStream();
+        StatusListener listener = new UserStreamAdapter() {
             public void onStatus(Status status) {
-                System.out.println(status.getUser().getName() + " : " + status.getText());
-            }
-            public void onDeletionNotice(StatusDeletionNotice statusDeletionNotice) {}
-            public void onTrackLimitationNotice(int numberOfLimitedStatuses) {}
-            public void onScrubGeo(long l, long l1) {
-            }
-            public void onStallWarning(StallWarning stallWarning) {
-            }
-            public void onException(Exception ex) {
-                ex.printStackTrace();
+                System.out.println(status); // logs the tweet author and text
             }
         };
-
+        User user = twitter.showUser("eluyha");
         twitterStream.addListener(listener);
-        // sample() method internally creates a thread which manipulates TwitterStream and calls these adequate listener methods continuously.
+        System.out.println("Listener initiated; listening for status updates.");
 
+        FilterQuery tweetFilterQuery = new FilterQuery();
+        tweetFilterQuery.follow(user.getId());
+        tweetFilterQuery.filterLevel("medium");
+        twitterStream.filter(tweetFilterQuery);
     }
 
 
 
-    public static void oAuth() throws Exception{
+    public static void oAuthStream() throws Exception{
 
         // The factory instance is re-useable and thread safe.
         twitterStream = TwitterStreamFactory.getSingleton();
@@ -101,6 +98,40 @@ public final class Twitter {
         }
     }
 
+    public static void oAuth() throws Exception{
+
+        // The factory instance is re-useable and thread safe.
+        twitter = TwitterFactory.getSingleton();
+        twitter.setOAuthConsumer("JzF5t6ZH5nFBA3xEOn3ooujOI", "CE4rbduP7hJA8lTAPjuaP86JtQ0HhzY3NCgtzcSsJwn7rNKQDj");
+        RequestToken requestToken = twitter.getOAuthRequestToken();
+        AccessToken accessToken = null;
+        if(Files.exists(path)) {
+            List<String> token = Files.readAllLines(path);
+            accessToken = new AccessToken(token.get(0), token.get(1));
+            twitter.setOAuthAccessToken(accessToken);
+        }
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        while (null == accessToken) {
+            System.out.println("Open the following URL and grant access to your account:");
+            System.out.println(requestToken.getAuthorizationURL());
+            System.out.print("Enter the PIN(if aviailable) or just hit enter.[PIN]:");
+            String pin = br.readLine();
+            try{
+                if(pin.length() > 0){
+                    accessToken = twitter.getOAuthAccessToken(requestToken, pin);
+                } else{
+                    accessToken = twitter.getOAuthAccessToken();
+                }
+                storeAccessToken(accessToken);
+            } catch (TwitterException te) {
+                if(401 == te.getStatusCode()){
+                    System.out.println("Unable to get the access token.");
+                }else{
+                    te.printStackTrace();
+                }
+            }
+        }
+    }
 
     private static void storeAccessToken(AccessToken accessToken) throws IOException{
         Files.write(path, Arrays.asList(accessToken.getToken(), accessToken.getTokenSecret()), StandardOpenOption.CREATE);
